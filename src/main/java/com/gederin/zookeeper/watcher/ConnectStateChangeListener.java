@@ -1,12 +1,15 @@
 package com.gederin.zookeeper.watcher;
 
 import com.gederin.config.Config;
+import com.gederin.model.Book;
+import com.gederin.service.BookService;
 import com.gederin.service.ClusterInformationService;
 import com.gederin.zookeeper.service.ZookeeperService;
 
 import org.I0Itec.zkclient.IZkStateListener;
 import org.apache.zookeeper.Watcher.Event.KeeperState;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 
@@ -19,16 +22,20 @@ import lombok.extern.slf4j.Slf4j;
 public class ConnectStateChangeListener implements IZkStateListener {
     private final ZookeeperService zookeeperService;
     private final ClusterInformationService clusterInformationService;
+    private final BookService bookService;
+    private final RestTemplate restTemplate;
     private final Config config;
 
     @Override
-    public void handleStateChanged(KeeperState keeperState) throws Exception {
+    public void handleStateChanged(KeeperState keeperState) {
         log.info("current state: {}", keeperState.name());
     }
 
     @Override
     public void handleNewSession() throws Exception {
         log.info("connected to zookeeper");
+
+        syncDataFromMaster();
 
         /**
          * Add new znode to /live_nodes and update local cluster information
@@ -48,5 +55,17 @@ public class ConnectStateChangeListener implements IZkStateListener {
     @Override
     public void handleSessionEstablishmentError(Throwable throwable) {
         log.error("could not establish zookeeper session");
+    }
+
+    private void syncDataFromMaster() {
+        if (config.getHostPort().equals(clusterInformationService.getMasterNode())) {
+            return;
+        }
+
+        String requestUrl = "http://".concat(clusterInformationService.getMasterNode() + "/v1/books/");
+        List<Book> books = restTemplate.getForObject(requestUrl, List.class);
+
+        bookService.getAllBooks().clear();
+        bookService.addBooks(books);
     }
 }

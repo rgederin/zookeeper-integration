@@ -1,6 +1,8 @@
 package com.gederin;
 
 import com.gederin.config.Config;
+import com.gederin.model.Book;
+import com.gederin.service.BookService;
 import com.gederin.service.ClusterInformationService;
 import com.gederin.zookeeper.service.ZookeeperService;
 import com.gederin.zookeeper.watcher.AllClusterNodesChangeListener;
@@ -12,6 +14,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 
@@ -36,6 +39,8 @@ public class ZookeeperIntegrationApplication implements ApplicationListener<Cont
     private final LiveClusterNodesChangeListener liveClusterNodesChangeListener;
     private final MasterChangeListener masterChangeListener;
     private final ConnectStateChangeListener connectStateChangeListener;
+    private final RestTemplate restTemplate;
+    private final BookService bookService;
 
     public static void main(String[] args) {
         SpringApplication.run(ZookeeperIntegrationApplication.class, args);
@@ -48,6 +53,8 @@ public class ZookeeperIntegrationApplication implements ApplicationListener<Cont
         addCurrentNodeToAllNodesList();
         addCurrentNodeToElectionNodesList();
         addCurrentNodeToLiveNodesList();
+
+        syncDataFromMaster();
 
         registerZookeeperWatchers();
     }
@@ -108,5 +115,17 @@ public class ZookeeperIntegrationApplication implements ApplicationListener<Cont
         zookeeperService.registerChildrenChangeWatcher(LIVE_NODES, liveClusterNodesChangeListener);
         zookeeperService.registerChildrenChangeWatcher(ALL_NODES, allClusterNodesChangeListener);
         zookeeperService.registerZkSessionStateListener(connectStateChangeListener);
+    }
+
+    private void syncDataFromMaster() {
+        if (config.getHostPort().equals(clusterInformationService.getMasterNode())) {
+            return;
+        }
+
+        String requestUrl = "http://".concat(clusterInformationService.getMasterNode() + "/v1/books/");
+        List<Book> books = restTemplate.getForObject(requestUrl, List.class);
+
+        bookService.getAllBooks().clear();
+        bookService.addBooks(books);
     }
 }

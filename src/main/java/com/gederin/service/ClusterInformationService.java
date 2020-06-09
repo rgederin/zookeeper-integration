@@ -24,7 +24,15 @@ public class ClusterInformationService {
         clusterInformationRepository.getLiveClusterNodes().addAll(liveNodes);
     }
 
+    public List<String> getLiveClusterNodes(){
+        return clusterInformationRepository.getLiveClusterNodes();
+    }
+
     public void setMasterNode(String node) {
         clusterInformationRepository.setMasterNode(node);
+    }
+
+    public String getMasterNode(){
+        return clusterInformationRepository.getMasterNode();
     }
 }

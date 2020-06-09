@@ -24,7 +24,6 @@ public class MasterChangeListener implements IZkChildListener {
 
     /**
      * listens for deletion of sequential znode under /election znode and updates the clusterinfo
-     *
      */
     @Override
     public void handleChildChange(String parentPath, List<String> currentChildren) {
