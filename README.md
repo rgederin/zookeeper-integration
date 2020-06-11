@@ -120,7 +120,13 @@ Deleting a znode
 
 ## Znode Types and their Use Cases
 
-There are four types of ZNodes in Zookeeper.
+There are four types of ZNodes in Zookeeper:
+
+* Persistent Znodes
+* Ephemeral Znodes
+* Ephemeral Sequential Znodes
+* Persistent Sequential Znodes
+
 
 ### Persistent Znodes 
 
@@ -129,10 +135,31 @@ As the name says, **once created these Znodes will be there forever in the Zooke
 As we learn this type of Znode never dies/deleted automatically, we can store any config information or any data that needs to be persistent. All servers can consume data from this Znode.
 
 
-### Ephemeral ZNodes
+### Ephemeral Znodes
 
 These znodes are **automatically deleted by the Zookeeper, once the client that created it, ends the session with zookeeper.**
 
 Zookeeper clients keep sending the ping request to keep the session alive. If Zookeeper does not see any ping request from the client for a period of configured session timeout, Zookeeper considers the client as dead and deletes the client session and the Znode created by the client. 
 
 You might have already guessed the use case of these znodes. Let’s say you want to maintain a **list of active servers in a cluster.** So, you create a parent Znode **“/live_servers”.** Under it, you keep creating child Znode for every new server in the cluster. At any point, if a server crashes/dies, child Znode belonging to the respective server will be deleted. Other servers will get a notification of this deletion if they are watching the znode “/live_servers”.
+
+### Ephemeral Sequential Znodes
+
+It is the same as ephemeral Znode, the only difference is **Zookeeper attaches a sequential number as a suffix, and if any new sibling Znode of the same type is created, it will be assigned a number higher than previous one.**
+
+Let’s say, we want to create two ephemeral sequential Znodes “child_nodeA” and “child_nodeB” inside “test_znode” parent Znode. It will attach sequence number “0000000000” and “0000000001” as the suffix.
+
+```
+[zk: localhost:2181(CONNECTED) 25] create -e -s /test_znode/child_node_a
+Created /test_znode/child_node_a0000000002
+[zk: localhost:2181(CONNECTED) 26] create -e -s /test_znode/child_node_b
+Created /test_znode/child_node_b0000000003
+[zk: localhost:2181(CONNECTED) 27] ls /test_znode
+[child_node_a0000000002, child_node_b0000000003]
+```
+
+This type of znode could be used in the leader election algorithm.
+
+Say I have a parent node “/election”, and for any new node that joins the cluster, I add an ephemeral sequential Znode to this “/election” node. We can consider a server as the leader if any server that created the znode has the least sequential number attached to it.
+
+So, even if a leader goes down, zookeeper will delete corresponding Znode created by the leader server and notify the client applications, then that client fetches the new lowermost sequence node and considers that as a new leader. We will talk in detail about the leader election in the later section.
