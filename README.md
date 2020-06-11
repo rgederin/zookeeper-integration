@@ -1,13 +1,15 @@
 # Table of Content
 
-- [Apache Zookeeper](#apache-zookeeper)
+- [Apache Zookeeper Overview](#apache-zookeeper-overview)
     * [Zookeeper ZNodes](#zooKeeper-znodes)
     * [Implementation choices](#implementation-choices)
     * [Install Zookeeper on Mac OS](#install-zookeeper-on-mac-os)
     * [Zookeeper operations](#zookeeper-operations)
     * [Znode Types and their Use Cases](#znode-types-and-their-use-cases)
+- [Apache Zookeeper Recipes](#apache-zookeeper-recipes)
+    * [Leader election](#leader-election)
 
-# Apache Zookeeper
+# Apache Zookeeper Overview
 
 Apache Zookeeper is a software project of the Apache Software Foundation. It is essentially a service for distributed systems offering a hierarchical key-value store, which is used to provide a distributed configuration service, synchronization service, and naming registry for large distributed systems.
 
@@ -163,3 +165,39 @@ This type of znode could be used in the leader election algorithm.
 Say I have a parent node “/election”, and for any new node that joins the cluster, I add an ephemeral sequential Znode to this “/election” node. We can consider a server as the leader if any server that created the znode has the least sequential number attached to it.
 
 So, even if a leader goes down, zookeeper will delete corresponding Znode created by the leader server and notify the client applications, then that client fetches the new lowermost sequence node and considers that as a new leader. We will talk in detail about the leader election in the later section.
+
+### Persistent Sequential Znodes
+
+This is a persistent node with a sequence number attached to its name as a suffix. This type is rarely used. Same principle as for Ephemeral Sequential Znodes
+
+
+# Apache Zookeeper Recipes
+
+Here I collected some of the common Zookeeper Recipes.
+
+## Leader election
+
+We will discuss three algorithms for the leader election.
+
+### Approach #1
+
+1. A client(any server belonging to the cluster) creates a **persistent znode /election** in Zookeeper.
+
+2. All clients add **a watch to /election** znode and listen to any children znode deletion or addition under /election znode.
+
+3. Now **each server joining the cluster** will try to create an **ephemeral znode /leader** under node /election with data as hostname, ex: node1.domain.com 
+Since **multiple servers in the cluster will try to create znode with the same name(/leader), only one will succeed**, and that server will be considered as a leader.
+
+4. Once all servers in the cluster completes above step, they will call **getChildren(“/election”)** and get the data(hostname) associated with child znode “/leader”, which will give the leader’s hostname.
+
+5. At any point, if the leader server goes down, Zookeeper will kill the session for that server after the specified session timeout. In the process, it will delete the node /leader as it was created by leader server and is an ephemeral node and then Zookeeper will notify all the servers that have set the watch on /election znode, as one of the children has been deleted.
+
+6. Once all server gets notified that the leader is dead or leader’s znode(/leader) is deleted, they will retry creating “/leader” znode and again only one server will succeed, making it a new leader.
+
+7. Once the /leader node is created with the hostname as the data part of the znode, zookeeper will again notify all servers (as we have set the watch in step 2).
+
+8. All servers will call getChildren() on “/election” and update the new leader in their memory.
+
+The problem with the above approach is, each time /leader node is deleted, Zookeeper will send the notification to all servers and all servers will try to write to zookeeper to become a new leader at the same time creating a **herd effect.**
+
+If we have a large number of servers, this approach would not be the right idea.
