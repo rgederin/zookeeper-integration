@@ -210,10 +210,7 @@ If we have a large number of servers, this approach would not be the right idea.
 2. **All clients add a watch to /election znode** and listen to any children znode deletion or addition under /election znode.
 
 3. Now each server joining the cluster will try to create an **ephemeral sequential znode /leader-sequential number under node /election** with data as hostname, ex: node1.domain.com
-Let’s say three servers in a cluster created znodes under /election, then the znode names would be:
- /election/leader-00000001
- /election/leader-00000002
- /election/leader-00000003
+Let’s say three servers in a cluster created znodes under /election, then the znode names would be: /election/leader-00000001, /election/leader-00000002, /election/leader-00000003.
 **Znode with least sequence number will be automatically considered as the leader.**
 
 4. Once all server completes the creation of znode under /election, they will perform getChildren(“/election”) and get the data(hostname) associated with least sequenced child node “/election/leader-00000001”, which will give the leader hostname.
