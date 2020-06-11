@@ -126,4 +126,5 @@ Note: If no flag is passed, by default persistent znode is created.
 
 * **Ephemeral ZNodes** - These znodes are automatically deleted by the Zookeeper, once the client that created it, ends the session with zookeeper.
 Zookeeper clients keep sending the ping request to keep the session alive. If Zookeeper does not see any ping request from the client for a period of configured session timeout, Zookeeper considers the client as dead and deletes the client session and the Znode created by the client.
+
 You might have already guessed the use case of these znodes. Let’s say you want to maintain a list of active servers in a cluster. So, you create a parent Znode “/live_servers”. Under it, you keep creating child Znode for every new server in the cluster. At any point, if a server crashes/dies, child Znode belonging to the respective server will be deleted. Other servers will get a notification of this deletion if they are watching the znode “/live_servers”.
