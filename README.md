@@ -226,3 +226,28 @@ But, even with this approach, we will face some degree of herd effect we talked 
 But, this is a design call that you need to take. Use approach 1 or 2, if you need all servers in your cluster to store the current leader’s hostname for its purpose.
 
 If you do not want to store current leader information in each server/follower and only the leader needs to know if he is the current leader to do leader specific tasks. You can further simplify the leader election process, which we will discuss in approach 3.
+
+
+###Approach 3: Using Ephemeral Sequential Znode but notify only one server in the event of a leader going down.
+
+1. Create a persistent znode /election.
+
+2. Now each server joining the cluster will try to create an ephemeral sequential znode /leader-sequential number under node /election with data as hostname, ex: node1.domain.com
+Let’s say three servers in a cluster created znodes under /election, then the znode names would be:
+/election/leader-00000001, 
+/election/leader-00000002, 
+/election/leader-00000003, 
+Znode with least sequence number will be automatically considered as a leader.
+
+3. Here we will **not set the watch on whole /election znode for any children change(add/delete child znode)**, instead, **each server in the cluster will set watch on child znode with one less sequence.**
+The idea is if a leader goes down only the next candidate who would become a leader should get the notification.
+So, in our example:
+* The server that created the znode /election/leader-00000001 will have no watch set.
+* The server that created the znode /election/leader-00000002 will watch for deletion of znode /election/leader-00000001
+* The server that created the znode /election/leader-00000003 will watch for deletion of znode /election/leader-00000002
+
+4. Then, if the current leader goes down, zookeeper will delete the node /election/leader-00000001 and send the notification to only the next leader i.e. the server that created node /election/leader-00000002
+
+That’s all on leader election logic. These are simple algorithms. There could be a situation when you want only those servers to take part in a leader election which has the latest data if you are creating a distributed database.
+
+In that case, you might want to create one more node that keeps this information, and in the event of the leader going down, only those servers that have the latest data can take part in an election.
