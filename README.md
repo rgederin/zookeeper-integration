@@ -4,7 +4,7 @@
     * [Zookeeper ZNodes](#zooKeeper-znodes)
     * [Implementation choices](#implementation-choices)
     * [Install Zookeeper on Mac OS](#install-zookeeper-on-mac-os)
-    * [Zookeeper operations](#яookeeper-operations)
+    * [Zookeeper operations](#zookeeper-operations)
 
 # Apache Zookeeper
 
