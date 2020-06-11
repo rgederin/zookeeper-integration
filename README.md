@@ -228,7 +228,7 @@ But, this is a design call that you need to take. Use approach 1 or 2, if you ne
 If you do not want to store current leader information in each server/follower and only the leader needs to know if he is the current leader to do leader specific tasks. You can further simplify the leader election process, which we will discuss in approach 3.
 
 
-###Approach 3: Using Ephemeral Sequential Znode but notify only one server in the event of a leader going down.
+### Approach 3: Using Ephemeral Sequential Znode but notify only one server in the event of a leader going down.
 
 1. Create a persistent znode /election.
 
