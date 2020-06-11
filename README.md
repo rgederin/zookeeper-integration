@@ -209,11 +209,11 @@ If we have a large number of servers, this approach would not be the right idea.
 
 2. **All clients add a watch to /election znode** and listen to any children znode deletion or addition under /election znode.
 
-3. Now each server joining the cluster will try to create an **ephemeral sequential znode /leader-<sequential number> under node /election** with data as hostname, ex: node1.domain.com
+3. Now each server joining the cluster will try to create an **ephemeral sequential znode /leader-sequential number under node /election** with data as hostname, ex: node1.domain.com
 Let’s say three servers in a cluster created znodes under /election, then the znode names would be:
-* /election/leader-00000001
-* /election/leader-00000002
-* /election/leader-00000003
+ /election/leader-00000001
+ /election/leader-00000002
+ /election/leader-00000003
 **Znode with least sequence number will be automatically considered as the leader.**
 
 4. Once all server completes the creation of znode under /election, they will perform getChildren(“/election”) and get the data(hostname) associated with least sequenced child node “/election/leader-00000001”, which will give the leader hostname.
@@ -221,3 +221,11 @@ Let’s say three servers in a cluster created znodes under /election, then the 
 5. At any point, if the current leader server goes down, Zookeeper will kill the session for that server after the specified session timeout. In the process, it will delete the node “/election/leader-00000001” as it was created by the leader server and is an ephemeral node and then Zookeeper will send a notification to all the server that was watching znode /election.
 
 6. Once all server gets the leader’s znode-delete notification, they again fetch all children under /election znode and get the data associated with the child znode that has the least sequence number(/election/leader-00000002) and store that as the new leader in its own memory.
+
+In this approach, we saw, if an existing leader dies, the servers are not sending an extra write request to the zookeeper to become the leader, leading to reduce network traffic.
+
+But, even with this approach, we will face some degree of herd effect we talked about in the previous approach. When the leader server dies, notification is sent to all servers in the cluster, creating a herd effect.
+
+But, this is a design call that you need to take. Use approach 1 or 2, if you need all servers in your cluster to store the current leader’s hostname for its purpose.
+
+If you do not want to store current leader information in each server/follower and only the leader needs to know if he is the current leader to do leader specific tasks. You can further simplify the leader election process, which we will discuss in approach 3.
