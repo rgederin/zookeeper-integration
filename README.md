@@ -179,7 +179,7 @@ Here I collected some of the common Zookeeper Recipes.
 
 We will discuss three algorithms for the leader election.
 
-### Approach #1
+### Approach 1: Using ephemeral single znode /leader
 
 1. A client(any server belonging to the cluster) creates a **persistent znode /election** in Zookeeper.
 
@@ -201,3 +201,23 @@ Since **multiple servers in the cluster will try to create znode with the same n
 The problem with the above approach is, each time /leader node is deleted, Zookeeper will send the notification to all servers and all servers will try to write to zookeeper to become a new leader at the same time creating a **herd effect.**
 
 If we have a large number of servers, this approach would not be the right idea.
+
+
+### Approach 2: Using Ephemeral Sequential Znodes
+
+1. A client(any server belonging to the cluster) creates a persistent znode **/election.**
+
+2. **All clients add a watch to /election znode** and listen to any children znode deletion or addition under /election znode.
+
+3. Now each server joining the cluster will try to create an **ephemeral sequential znode /leader-<sequential number> under node /election** with data as hostname, ex: node1.domain.com
+Let’s say three servers in a cluster created znodes under /election, then the znode names would be:
+* /election/leader-00000001
+* /election/leader-00000002
+* /election/leader-00000003
+**Znode with least sequence number will be automatically considered as the leader.**
+
+4. Once all server completes the creation of znode under /election, they will perform getChildren(“/election”) and get the data(hostname) associated with least sequenced child node “/election/leader-00000001”, which will give the leader hostname.
+
+5. At any point, if the current leader server goes down, Zookeeper will kill the session for that server after the specified session timeout. In the process, it will delete the node “/election/leader-00000001” as it was created by the leader server and is an ephemeral node and then Zookeeper will send a notification to all the server that was watching znode /election.
+
+6. Once all server gets the leader’s znode-delete notification, they again fetch all children under /election znode and get the data associated with the child znode that has the least sequence number(/election/leader-00000002) and store that as the new leader in its own memory.
