@@ -296,3 +296,23 @@ You can store any information specific to the node in znode’s data
 With that let’s look at, how a zookeeper Znode structure looks like for a typical distributes application:
 
 ![typical](https://github.com/rgederin/zookeeper-integration/blob/master/img/typical.png)
+
+# Application overview
+
+In order to demonstrate all theoretical knowledge in practice we will implement small Spring Boot application which will be running in a cluster managed by Apache Zookeeper.
+
+**Key features we will build:**
+
+* Model a database that is **replicated across multiple servers.**
+
+* The system should **scale horizontally**, meaning if any new server instance is added to the cluster, it should have the latest data and start serving update/read requests.
+
+* **Data consistency**. All update requests will be forwarded to the leader, and then the **leader will broadcast data to all active servers** and then returns the update status.
+
+* Data can be read from any of the replicas without any inconsistencies.
+
+* All servers in the cluster will store the cluster state — Information like, who is the leader and server state(list of live/dead servers in the cluster). This info is required by the leader server to broadcast update requests to active servers, and active follower servers need to forward any update request to their leader.
+
+* In the event of a change in the **cluster state(leader goes down/any server goes down)**, all servers in the cluster need to be notified and store the latest change in **local cluster data storage.**
+
+We will use zookeeper as our coordination service to manage the cluster state information and notify all servers in the cluster in case of any change in cluster state.
