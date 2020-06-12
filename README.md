@@ -2,12 +2,14 @@
 
 - [Apache Zookeeper Overview](#apache-zookeeper-overview)
     * [Zookeeper ZNodes](#zooKeeper-znodes)
-    * [Implementation choices](#implementation-choices)
     * [Install Zookeeper on Mac OS](#install-zookeeper-on-mac-os)
     * [Zookeeper operations](#zookeeper-operations)
     * [Znode Types and their Use Cases](#znode-types-and-their-use-cases)
 - [Apache Zookeeper Recipes](#apache-zookeeper-recipes)
     * [Leader election](#leader-election)
+    * [Distributed Locks](#distributed-locks)
+    * [Cluster management](#cluster-management)
+    * [Typical distributed application structure](#typical-distributed-application-structure)
 
 # Apache Zookeeper Overview
 
@@ -22,9 +24,9 @@ It is a library that enables coordination in distributed systems. Below are some
 
 ## Zookeeper ZNodes
 
-Zookeeper solves these problems using its magical tree structure file system called znodes, somewhat similar to the Unix file system. These znodes are analogous to folders and files in a Unix file system with some additional capabilities. 
+Zookeeper solves these problems using its magical tree structure file system called znodes, somewhat similar to the Unix file system. These znodes are analogous to folders and files in a Unix file system with some additional capabilities.
 
-Zookeeper provides primitive operations to manipulate these znodes, through which we will solve our distributed system problems. 
+Zookeeper provides primitive operations to manipulate these znodes, through which we will solve our distributed system problems.
 
 ![struct](https://github.com/rgederin/zookeeper-integration/blob/master/img/struct.jpg)
 
@@ -58,7 +60,7 @@ ODL1610003:~ rgederin$ zkServer start
 ZooKeeper JMX enabled by default
 Using config: /usr/local/etc/zookeeper/zoo.cfg
 Starting zookeeper ... STARTED
-ODL1610003:~ rgederin$ 
+ODL1610003:~ rgederin$
 ```
 
 Start ZK CLI
@@ -73,7 +75,7 @@ JLine support is enabled
 WATCHER::
 
 WatchedEvent state:SyncConnected type:None path:null
-[zk: localhost:2181(CONNECTED) 0] 
+[zk: localhost:2181(CONNECTED) 0]
 ```
 
 reate() — creating a znode “/test_znode”
@@ -130,7 +132,7 @@ There are four types of ZNodes in Zookeeper:
 * Persistent Sequential Znodes
 
 
-### Persistent Znodes 
+### Persistent Znodes
 
 As the name says, **once created these Znodes will be there forever in the Zookeeper.** To remove these Znodes, you need to delete them manually(use delete operation).
 
@@ -141,7 +143,7 @@ As we learn this type of Znode never dies/deleted automatically, we can store an
 
 These znodes are **automatically deleted by the Zookeeper, once the client that created it, ends the session with zookeeper.**
 
-Zookeeper clients keep sending the ping request to keep the session alive. If Zookeeper does not see any ping request from the client for a period of configured session timeout, Zookeeper considers the client as dead and deletes the client session and the Znode created by the client. 
+Zookeeper clients keep sending the ping request to keep the session alive. If Zookeeper does not see any ping request from the client for a period of configured session timeout, Zookeeper considers the client as dead and deletes the client session and the Znode created by the client.
 
 You might have already guessed the use case of these znodes. Let’s say you want to maintain a **list of active servers in a cluster.** So, you create a parent Znode **“/live_servers”.** Under it, you keep creating child Znode for every new server in the cluster. At any point, if a server crashes/dies, child Znode belonging to the respective server will be deleted. Other servers will get a notification of this deletion if they are watching the znode “/live_servers”.
 
@@ -185,7 +187,7 @@ We will discuss three algorithms for the leader election.
 
 2. All clients add **a watch to /election** znode and listen to any children znode deletion or addition under /election znode.
 
-3. Now **each server joining the cluster** will try to create an **ephemeral znode /leader** under node /election with data as hostname, ex: node1.domain.com 
+3. Now **each server joining the cluster** will try to create an **ephemeral znode /leader** under node /election with data as hostname, ex: node1.domain.com
 Since **multiple servers in the cluster will try to create znode with the same name(/leader), only one will succeed**, and that server will be considered as a leader.
 
 4. Once all servers in the cluster completes above step, they will call **getChildren(“/election”)** and get the data(hostname) associated with child znode “/leader”, which will give the leader’s hostname.
@@ -234,9 +236,9 @@ If you do not want to store current leader information in each server/follower a
 
 2. Now each server joining the cluster will try to create an ephemeral sequential znode /leader-sequential number under node /election with data as hostname, ex: node1.domain.com
 Let’s say three servers in a cluster created znodes under /election, then the znode names would be:
-/election/leader-00000001, 
-/election/leader-00000002, 
-/election/leader-00000003, 
+/election/leader-00000001,
+/election/leader-00000002,
+/election/leader-00000003,
 Znode with least sequence number will be automatically considered as a leader.
 
 3. Here we will **not set the watch on whole /election znode for any children change(add/delete child znode)**, instead, **each server in the cluster will set watch on child znode with one less sequence.**
@@ -251,3 +253,46 @@ So, in our example:
 That’s all on leader election logic. These are simple algorithms. There could be a situation when you want only those servers to take part in a leader election which has the latest data if you are creating a distributed database.
 
 In that case, you might want to create one more node that keeps this information, and in the event of the leader going down, only those servers that have the latest data can take part in an election.
+
+## Distributed Locks
+
+Suppose we have “n” servers trying to update a shared resource simultaneously, say a shared file. If we do not write these files in a mutually exclusive way, it may lead to data inconsistencies in the shared file.
+We will manipulate operations on znode to implement a distributed lock, so that, different servers can acquire this lock and perform a task.
+The algorithm for managing distributed locks is the same as the leader election with a slight change.
+
+1. Instead of the /election parent node, we will use /lock as the parent node.
+
+2. The rest of the steps will remain the same as in the leader election algorithm. Any server which is considered a leader is analogous to server acquiring the lock.
+3. The only difference is, once the server acquires the lock, the server will perform its task and then call the delete operation on the child znode it has created so that the next server can acquire lock upon delete notification from zookeeper and perform the task.
+
+
+## Cluster management
+
+In Zookeeper it is pretty simple to maintain group membership info using persistent and ephemeral znodes. I will talk about a simple case where you want to maintain information about all servers in a cluster and what servers are currently alive.
+
+We will use a persistent znode to keep track of all the servers that join the cluster and zookeeper’s ability to delete an ephemeral znodes upon client session termination will come handy in maintaining the list of active/live servers.
+
+1. Create a parent persistent znode **/all_nodes**, this znode will be used to store any server that connects to the cluster.
+
+2. Create a parent persistent znode **/live_nodes**, this znode will be used to store only the live nodes in the cluster and will store ephemeral child znodes. If any server crashes or goes down, respective child ephemeral znode will be deleted.
+
+3. Any server connecting to the cluster will create a new **persistent znode** under **/all_nodes** say /node1.domain.com. Let’s say another two node joins the cluster. Then the znode structure will look like:
+* /all_nodes/node1.domain.com
+* /all_nodes/node2.domain.com
+* /all_nodes/node3.domain.com
+You can store any information specific to the node in znode’s data
+
+4. Any server connecting to the cluster will create a new **ephemeral znode** under **/live_nodes** say /node1.domain.com. Let’s say another two-node joins the cluster. Then the znode structure will look like:
+* /live_nodes/node1.domain.com
+* /live_nodes/node2.domain.com
+* /live_nodes/node3.domain.com
+
+5. Add a watch for any change in **children of /all_nodes**. If any server is added or deleted to/from the cluster, all server in the cluster needs to be notified.
+
+6. Add a watch for any change in **children of /live_nodes**. This way all servers will be notified if any server in the cluster goes down or comes alive.
+
+## Typical distributed application structure
+
+With that let’s look at, how a zookeeper Znode structure looks like for a typical distributes application:
+
+![typical](https://github.com/rgederin/zookeeper-integration/blob/master/img/typical.jpg)
