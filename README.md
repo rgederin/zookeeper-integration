@@ -295,4 +295,4 @@ You can store any information specific to the node in znode’s data
 
 With that let’s look at, how a zookeeper Znode structure looks like for a typical distributes application:
 
-![typical](https://github.com/rgederin/zookeeper-integration/blob/master/img/typical.jpg)
+![typical](https://github.com/rgederin/zookeeper-integration/blob/master/img/typical.png)
