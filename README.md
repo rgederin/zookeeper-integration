@@ -10,6 +10,7 @@
     * [Distributed Locks](#distributed-locks)
     * [Cluster management](#cluster-management)
     * [Typical distributed application structure](#typical-distributed-application-structure)
+- [Application overview](#application-overview)
 
 # Apache Zookeeper Overview
 
