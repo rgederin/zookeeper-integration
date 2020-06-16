@@ -11,6 +11,8 @@
     * [Cluster management](#cluster-management)
     * [Typical distributed application structure](#typical-distributed-application-structure)
 - [Application overview](#application-overview)
+- [Application implementation](#application-implementation)
+    * [Zookeper operations](#zookeper-operations)
 
 # Apache Zookeeper Overview
 
@@ -332,3 +334,41 @@ So what we will build:
 
 * Any server coming up after being dead will sync Book data from the leader.
 
+# Application implementation
+
+In the implementation, we mainly will focus on:
+
+1. The zookeeper operations and algorithms that we need to implement to solve the leader election problem and to maintain active/inactive servers list.
+
+2. The listeners/watchers implementation that is needed for an app server to get notified in the event of leader change or any server going down.
+
+3.Tasks that our spring boot app server(database) needs to perform during startup like creating necessary nodes, registering watchers, etc.
+
+## Zookeper operations
+
+To create all the required znodes(/election, /all_nodes, /live_nodes) before we start our application server.
+
+### Create all required parent persistent znodes (/election, /all_nodes, /live_nodes)
+
+This should be done during application startup.
+
+```
+  /**
+     * Create three parent PERSISTENT znodes in zookeeper cluster
+     *  - /all_nodes - here all znodes in zookeeper cluster will be saved (including dead ones)
+     *  - /live_nodes - here current live znodes in zookeper cluster will saved
+     *  - /election - parent znode which is using for master election
+     */
+
+    public void createAllParentPersistentNodes() {
+        if (!zkClient.exists(ALL_NODES)) {
+            zkClient.create(ALL_NODES, "all nodes are displayed here", CreateMode.PERSISTENT);
+        }
+        if (!zkClient.exists(LIVE_NODES)) {
+            zkClient.create(LIVE_NODES, "all live nodes are displayed here", CreateMode.PERSISTENT);
+        }
+        if (!zkClient.exists(ELECTION_NODE)) {
+            zkClient.create(ELECTION_NODE, "all election nodes are displayed here", CreateMode.PERSISTENT);
+        }
+    }
+```
