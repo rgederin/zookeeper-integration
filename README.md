@@ -15,6 +15,7 @@
     * [Zookeper operations](#zookeper-operations)
     * [Listeners and Watchers](#listeners-and-watchers)
     * [Application Startup Tasks](#application-startup-tasks)
+    * [How to run application in a cluster](#how-to-run-application-in-a-cluster)
 
 # Apache Zookeeper Overview
 
@@ -643,3 +644,15 @@ During application startup below tasks should be execute:
         registerZookeeperWatchers();
     }
 ```
+
+## How to run application in a cluster
+
+Start this application on different ports (make sure tha zookeeper service is running)
+
+```
+mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8081"
+mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8082"
+mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8083"
+```
+
+Use attached Postman collection to check API.
