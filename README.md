@@ -14,6 +14,7 @@
 - [Application implementation](#application-implementation)
     * [Zookeper operations](#zookeper-operations)
     * [Listeners and Watchers](#listeners-and-watchers)
+    * [Application Startup Tasks](#application-startup-tasks)
 
 # Apache Zookeeper Overview
 
@@ -478,9 +479,6 @@ We need to setup four different listeners in order to make needful actions when 
 ### Watcher for any change in children of /all_nodes, to identify and server addition/deletion to/from the cluster
 
 ```
-@Component
-@RequiredArgsConstructor
-@Slf4j
 public class AllClusterNodesChangeListener implements IZkChildListener {
 
     private final ClusterInformationService clusterInformationService;
@@ -501,3 +499,147 @@ public class AllClusterNodesChangeListener implements IZkChildListener {
 ``` 
 
 ### Watcher for change in children in /live_nodes, to capture if any server goes down
+
+```
+public class LiveClusterNodesChangeListener implements IZkChildListener {
+
+    private final ClusterInformationService clusterInformationService;
+
+    /**
+     * This method will be invoked for any change in /live_nodes children
+     *
+     * @param parentPath "/all_nodes"
+     * @param currentChildren  current list of children for /live_nodes. All live znodes in the cluster
+     */
+    @Override
+    public void handleChildChange(String parentPath, List<String> currentChildren) {
+        log.info("current live size: {}", currentChildren.size());
+        clusterInformationService.rebuildLiveNodesList(currentChildren);
+    }
+}
+```
+
+### Watchers to capture the change in leader, listening to the change in children of znode /election. Then fetch the least sequenced znode from the list of children and make it a new leader server.
+
+```
+public class MasterChangeListener implements IZkChildListener {
+
+    private final ZookeeperService zookeeperService;
+    private final ClusterInformationService clusterInformationService;
+
+    /**
+     * listens for deletion of sequential znode under /election znode and updates the clusterinfo
+     */
+    @Override
+    public void handleChildChange(String parentPath, List<String> currentChildren) {
+        if (currentChildren.isEmpty()) {
+            throw new RuntimeException("No node exists to select master!!");
+        } else {
+            //get least sequenced znode
+            Collections.sort(currentChildren);
+            String masterZNode = currentChildren.get(0);
+
+            // once znode is fetched, fetch the znode data to get the hostname of new leader
+            String masterNode = zookeeperService.getZNodeData(ELECTION_NODE.concat("/").concat(masterZNode));
+            log.info("new master is: {}", masterNode);
+
+            //update the cluster info with new leader
+            clusterInformationService.setMasterNode(masterNode);
+        }
+    }
+}
+```
+
+### Watcher for every new session establishment with zookeeper
+
+Application session with zookeeper might end if the zookeeper doesn’t receive any ping within the configured session timeout, this could happen due to temporary network failure or GC pause or any other reason.
+
+Once the session of a server is killed by the zookeeper, Zookeeper will delete all ephemeral znodes created by this server, leading to the deletion of znode under /live_nodes.
+
+So, if the session is established at any later point, we need to re-sync data from the current master and create znode in /live_nodes to notify all other servers that an existing server has become active.
+
+```
+public class ConnectStateChangeListener implements IZkStateListener {
+    private final ZookeeperService zookeeperService;
+    private final ClusterInformationService clusterInformationService;
+    private final BookService bookService;
+    private final RestTemplate restTemplate;
+    private final Config config;
+
+    @Override
+    public void handleStateChanged(KeeperState keeperState) {
+        log.info("current state: {}", keeperState.name());
+    }
+
+    @Override
+    public void handleNewSession() throws Exception {
+        log.info("connected to zookeeper");
+
+        syncDataFromMaster();
+
+        /**
+         * Add new znode to /live_nodes and update local cluster information
+         */
+        zookeeperService.createAndAddToLiveNodes(config.getHostPort(), "cluster node");
+
+        List<String> liveNodes = zookeeperService.getLiveNodesInZookeeperCluster();
+        clusterInformationService.rebuildLiveNodesList(liveNodes);
+
+        /**
+         * Retry creating znode under /election
+         */
+        zookeeperService.createNodeInElectionZnode(config.getHostPort());
+        clusterInformationService.setMasterNode(zookeeperService.getLeaderNodeData());
+    }
+
+    @Override
+    public void handleSessionEstablishmentError(Throwable throwable) {
+        log.error("could not establish zookeeper session");
+    }
+
+    private void syncDataFromMaster() {
+        if (config.getHostPort().equals(clusterInformationService.getMasterNode())) {
+            return;
+        }
+
+        String requestUrl = "http://".concat(clusterInformationService.getMasterNode() + "/v1/books/");
+        List<Book> books = restTemplate.getForObject(requestUrl, List.class);
+
+        bookService.getAllBooks().clear();
+        bookService.addBooks(books);
+    }
+}
+```
+
+## Application Startup Tasks
+
+During application startup below tasks should be execute:
+
+1. Create all parent znodes /election, /live_nodes, /all_nodes, if they do not exist.
+
+2. Add the server to cluster by creating znode under /all_nodes, with znode name as host:port string and update the local ClusterInfo object.
+
+3. Set ephemeral sequential znode in the /election, to set up a leader for the cluster, with suffix “node-” and data as “host:port”.
+
+4. Get the current leader from the zookeeper and set it to ClusterInfo object.
+
+5. Sync all Person data from the leader server.
+
+6. Once the sync completes, announce this server as active by adding a child znode under /live_nodes with “host:port” string as the znode name and then update the ClusterInfo object.
+
+7. In the final step register all listeners/watchers to get notification from zookeeper.
+
+```
+ @Override
+    public void onApplicationEvent(ContextRefreshedEvent event) {
+        zookeeperService.createAllParentPersistentNodes();
+
+        addCurrentNodeToAllNodesList();
+        addCurrentNodeToElectionNodesList();
+        addCurrentNodeToLiveNodesList();
+
+        syncDataFromMaster();
+
+        registerZookeeperWatchers();
+    }
+```
