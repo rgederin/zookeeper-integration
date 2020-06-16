@@ -317,3 +317,18 @@ In order to demonstrate all theoretical knowledge in practice we will implement 
 * In the event of a change in the **cluster state(leader goes down/any server goes down)**, all servers in the cluster need to be notified and store the latest change in **local cluster data storage.**
 
 We will use zookeeper as our coordination service to manage the cluster state information and notify all servers in the cluster in case of any change in cluster state.
+
+So what we will build:
+
+* Three Spring boot App server running on port 8081, 8082 and 8083 is used as a database that stores Books data (List<Books>).
+
+* Each spring boot server connects to a standalone zookeeper server during startup (localhost:2181).
+
+* Each spring boot app server will maintain and store the cluster-info in its memory. This cluster-info will tell current active servers, the current leader of the cluster, and all nodes that are part of this cluster.
+
+* We will create 2 GET APIs, to get info about the cluster and person data and 1 POST API to save Book data.
+
+* Any Book add request coming to the App server will be sent to Leader and which will broadcast the update request to all live servers/followers.
+
+* Any server coming up after being dead will sync Book data from the leader.
+
