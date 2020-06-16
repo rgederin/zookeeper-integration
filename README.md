@@ -13,6 +13,7 @@
 - [Application overview](#application-overview)
 - [Application implementation](#application-implementation)
     * [Zookeper operations](#zookeper-operations)
+    * [Listeners and Watchers](#listeners-and-watchers)
 
 # Apache Zookeeper Overview
 
@@ -469,3 +470,34 @@ This should be done during application startup.
         return getZNodeData(ELECTION_NODE.concat("/").concat(masterZNode));
     }
 ```
+
+## Listeners and Watchers
+
+We need to setup four different listeners in order to make needful actions when cluster state is changing.
+
+### Watcher for any change in children of /all_nodes, to identify and server addition/deletion to/from the cluster
+
+```
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class AllClusterNodesChangeListener implements IZkChildListener {
+
+    private final ClusterInformationService clusterInformationService;
+
+    /**
+     * This method will be invoked for any change in /all_nodes children
+     *
+     * @param parent "/all_nodes"
+     * @param nodes  current list of children for all_nodes. All persistent znodes in the cluster
+     */
+    @Override
+    public void handleChildChange(String parent, List<String> nodes) {
+        log.info("current list of all persistent znodes in the cluster: {}", nodes);
+
+        clusterInformationService.rebuildAllNodesList(nodes);
+    }
+}
+``` 
+
+### Watcher for change in children in /live_nodes, to capture if any server goes down
