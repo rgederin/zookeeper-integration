@@ -353,7 +353,7 @@ To create all the required znodes(/election, /all_nodes, /live_nodes) before we 
 This should be done during application startup.
 
 ```
-  /**
+    /**
      * Create three parent PERSISTENT znodes in zookeeper cluster
      *  - /all_nodes - here all znodes in zookeeper cluster will be saved (including dead ones)
      *  - /live_nodes - here current live znodes in zookeper cluster will saved
@@ -370,5 +370,102 @@ This should be done during application startup.
         if (!zkClient.exists(ELECTION_NODE)) {
             zkClient.create(ELECTION_NODE, "all election nodes are displayed here", CreateMode.PERSISTENT);
         }
+    }
+```
+### Create persistent znodes inside /all_nodes
+
+```
+/**
+     * Add node to /all_nodes children in zookeper cluster
+     * <p>
+     * Persistent mode is using since we need to have znode in the list when it will be dead
+     *
+     * @param nodeName - name of the new znode
+     * @param data     - znode data
+     */
+    public void createAndAddToAllNodes(String nodeName, String data) {
+        if (!zkClient.exists(ALL_NODES)) {
+            zkClient.create(ALL_NODES, "all nodes are displayed here", CreateMode.PERSISTENT);
+        }
+
+        /**
+         * "/all_nodes/host:port"
+         */
+        String childNode = ALL_NODES.concat("/").concat(nodeName);
+
+        if (zkClient.exists(childNode)) {
+            return;
+        }
+
+        zkClient.create(childNode, data, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+    }
+```
+
+### Create ephemeral znodes inside /live_nodes
+
+```
+    /**
+     * Add node to /live_nodes children in zookeper cluster
+     * <p>
+     * EPHEMERAL mode is using since we need to have znode in the list only when it live
+     *
+     * @param nodeName - name of the new znode
+     * @param data     - znode data
+     */
+    public void createAndAddToLiveNodes(String nodeName, String data) {
+        if (!zkClient.exists(LIVE_NODES)) {
+            zkClient.create(LIVE_NODES, "all live nodes are displayed here", CreateMode.PERSISTENT);
+        }
+
+        /**
+         * "/live_nodes/host:port"
+         */
+        String childNode = LIVE_NODES.concat("/").concat(nodeName);
+
+        if (zkClient.exists(childNode)) {
+            return;
+        }
+
+        zkClient.create(childNode, data, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
+    }
+```
+
+### Create ephemeral sequential znodes inside /election
+
+```
+/**
+     * Add node to /election children in zookeper cluster
+     * <p>
+     * EPHEMERAL_SEQUENTIAL mode is using since we need to have possibility to sort nodes in /election list
+     *
+     * @param data     - znode data
+     */
+    public void createNodeInElectionZnode(String data) {
+        if (!zkClient.exists(ELECTION_NODE)) {
+            zkClient.create(ELECTION_NODE, "election node", CreateMode.PERSISTENT);
+        }
+
+        zkClient.create(ELECTION_NODE.concat("/node"), data, CreateMode.EPHEMERAL_SEQUENTIAL);
+    }
+```
+
+### Leader election
+
+```
+/**
+     * Get leade node in zookeeper cluset
+     *
+     * @return Master znode data
+     */
+    public String getLeaderNodeData() {
+        if (!zkClient.exists(ELECTION_NODE)) {
+            throw new RuntimeException("No node /election exists");
+        }
+        List<String> nodesInElection = zkClient.getChildren(ELECTION_NODE);
+        Collections.sort(nodesInElection);
+
+        String masterZNode = nodesInElection.get(0);
+
+        return getZNodeData(ELECTION_NODE.concat("/").concat(masterZNode));
     }
 ```
